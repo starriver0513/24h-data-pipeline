@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>24時間データ自動更新パイプライン｜保存版資料</title>
+<meta name="description" content="会議の録画をGrokで文字にして、毎晩ひとりでに貯まる状態を作る手順書。Zoomの設定からAPIキー、スキル化、定期実行まで6ステップでまとめています。">
+<meta property="og:title" content="24時間データ自動更新パイプライン｜保存版資料">
+<meta property="og:description" content="会議の録画をGrokで文字にして、毎晩ひとりでに貯まる状態を作る手順書。Zoomの設定からAPIキー、スキル化、定期実行まで6ステップでまとめています。">
+<meta name="theme-color" content="#0b2a5b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=M+PLUS+1:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   保存版資料テンプレート v2 — 青ベース / 動きあり / GitHub Pages配布用
+   使い方: 各コンポーネントは <!-- [C:名前] --> で始まる。
+           使わないブロックはコメントごと削除してよい。
+   ============================================================ */
+
+:root{
+  /* --- 色（青ベース。紫・ピンクは使わない） --- */
+  --ink:#0a1020;          /* 本文 */
+  --ink-soft:#22304a;     /* 見出し補助 */
+  --muted:#5c6880;        /* 補足文 */
+  --navy:#0b2a5b;         /* 濃紺 */
+  --blue:#0866ff;         /* 主役の青 */
+  --blue-dark:#073b9a;
+  --cyan:#28d3ff;         /* 差し色 */
+  --sky:#d9eaff;
+  --blue-soft:#eef5ff;
+  --line:#d8e4f6;
+  --bg:#f6f9ff;
+  --white:#fff;
+  --code-bg:#0b1834;      /* プロンプト枠 */
+  --ok:#0f9d58;
+  --warn:#f59e0b;
+  --grad-hero:linear-gradient(135deg,#040c22 0%,#062a68 48%,#0a63d6 100%);
+  --grad-accent:linear-gradient(135deg,var(--cyan) 0%,var(--blue) 100%);
+  --shadow:0 18px 44px rgba(8,32,80,.12);
+  --shadow-hover:0 26px 64px rgba(8,32,80,.22);
+  --radius:18px;
+  --radius-sm:12px;
+  --max:1040px;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;overflow-x:hidden;scroll-padding-top:24px}
+body{
+  margin:0;color:var(--ink);background:var(--bg);
+  font-family:'Noto Sans JP',-apple-system,BlinkMacSystemFont,'Hiragino Sans',Meiryo,sans-serif;
+  line-height:1.95;font-size:16px;overflow-x:hidden;
+  background-image:
+    radial-gradient(circle at 12% -4%,rgba(8,102,255,.10),transparent 34%),
+    radial-gradient(circle at 92% 6%,rgba(40,211,255,.10),transparent 30%);
+  background-attachment:fixed;
+}
+a{color:var(--blue);font-weight:700;text-underline-offset:3px;text-decoration-thickness:2px}
+img{max-width:100%;height:auto;display:block}
+
+/* [C:進捗バー] ページ上端のスクロール進捗 */
+.progress{position:fixed;inset:0 0 auto 0;height:4px;z-index:60;background:transparent}
+.progress span{display:block;height:100%;width:0;background:var(--grad-accent);box-shadow:0 0 14px rgba(8,102,255,.6);transition:width .1s linear}
+
+.page{width:min(var(--max),calc(100vw - 32px));margin:0 auto;padding:28px 0 96px}
+
+/* ============ [C:ヒーロー] ============ */
+.hero{position:relative;overflow:hidden;border-radius:26px;color:#fff;padding:clamp(30px,5vw,64px);background:var(--grad-hero);box-shadow:var(--shadow-hover)}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(135deg,rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(45deg,rgba(255,255,255,.05) 1px,transparent 1px);
+  background-size:74px 74px;opacity:.6}
+.hero::after{content:"";position:absolute;width:280px;height:280px;right:-90px;top:-110px;border-radius:50%;
+  background:radial-gradient(circle,rgba(40,211,255,.35),transparent 70%);animation:float 7s ease-in-out infinite;pointer-events:none}
+.hero-inner{position:relative;z-index:1}
+.hero-glow{position:absolute;inset:-40%;z-index:0;pointer-events:none;opacity:.5;
+  background:radial-gradient(320px circle at var(--mx,50%) var(--my,50%),rgba(120,190,255,.30),transparent 60%);transition:opacity .4s ease}
+@keyframes float{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-14px,0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+.badge{display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border-radius:999px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);
+  font-size:12px;font-weight:800;letter-spacing:.1em}
+.badge .dot{width:8px;height:8px;border-radius:50%;background:#4ade80;animation:blink 1.8s ease-in-out infinite}
+.hero h1{margin:18px 0 14px;font-family:'M PLUS 1',sans-serif;font-size:clamp(27px,5.4vw,52px);line-height:1.28;font-weight:800;letter-spacing:-.01em}
+.hero h1 .grad{background:linear-gradient(135deg,#8fd6ff,#fff 60%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero .lead{margin:0;font-size:clamp(14px,2.2vw,17px);opacity:.94;max-width:44em}
+.hero-meta{margin-top:16px;font-size:13px;opacity:.8}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.hero-figure{margin-top:28px;border-radius:18px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 16px 40px rgba(0,0,0,.42)}
+.hero-stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.hero-stat{flex:1 1 150px;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16)}
+.hero-stat b{display:block;font-family:'M PLUS 1',sans-serif;font-size:clamp(20px,3.4vw,28px);line-height:1.3}
+.hero-stat span{font-size:12px;opacity:.82}
+
+/* ============ [C:ボタン] ============ */
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:13px 24px;
+  overflow:hidden;border-radius:14px;background:var(--grad-accent);color:#fff!important;font-weight:900;text-decoration:none;
+  box-shadow:0 12px 30px rgba(8,102,255,.34);transition:transform .26s ease,box-shadow .26s ease}
+.btn::before{content:"";position:absolute;inset:0;transform:translateX(-130%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);transition:transform .6s ease}
+.btn:hover{transform:translateY(-3px);box-shadow:0 18px 42px rgba(8,102,255,.46)}
+.btn:hover::before{transform:translateX(130%)}
+.btn.ghost{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.4);box-shadow:none}
+.btn.solid{background:var(--navy);box-shadow:0 12px 30px rgba(11,42,91,.28)}
+.btn.small{min-height:40px;padding:9px 16px;font-size:13px;border-radius:11px;box-shadow:var(--shadow)}
+/* [C:ツールリンク] 本文中に置く小さめリンクボタン。章末に集約せず、話題が出た章の中に置く */
+.toollink{display:inline-flex;align-items:center;gap:7px;margin:4px 8px 4px 0;padding:8px 14px;border-radius:999px;
+  background:var(--white);border:1px solid var(--line);color:var(--blue)!important;font-size:13.5px;font-weight:800;
+  text-decoration:none;box-shadow:0 6px 16px rgba(8,32,80,.07);transition:transform .2s ease,border-color .2s ease}
+.toollink:hover{transform:translateY(-2px);border-color:var(--blue)}
+.toollink::after{content:"↗";font-size:11px;opacity:.7}
+
+/* ============ [C:目次] ============ */
+.toc{margin:30px 0 0;padding:24px 26px;border-radius:var(--radius);background:var(--white);border:1px solid var(--line);box-shadow:var(--shadow)}
+.toc h2{margin:0 0 14px;font-family:'M PLUS 1',sans-serif;font-size:17px;color:var(--navy)}
+.toc ol{margin:0;padding-left:0;list-style:none;counter-reset:toc;display:grid;gap:6px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.toc li{counter-increment:toc}
+.toc a{display:flex;gap:10px;align-items:baseline;padding:8px 10px;border-radius:10px;color:var(--ink-soft)!important;
+  font-weight:700;font-size:14.5px;text-decoration:none;transition:background .2s ease,color .2s ease}
+.toc a::before{content:counter(toc,decimal-leading-zero);color:var(--blue);font-family:'M PLUS 1',sans-serif;font-size:13px}
+.toc a:hover,.toc a.active{background:var(--blue-soft);color:var(--navy)!important}
+
+/* [C:サイド進捗ナビ] PCのみ。現在地を点で示す */
+.sidenav{position:fixed;right:22px;top:50%;transform:translateY(-50%);z-index:40;display:none;flex-direction:column;gap:11px}
+.sidenav a{position:relative;width:11px;height:11px;border-radius:50%;background:var(--line);transition:background .25s ease,transform .25s ease}
+.sidenav a.active{background:var(--blue);transform:scale(1.45)}
+.sidenav a span{position:absolute;right:20px;top:50%;transform:translateY(-50%) translateX(6px);white-space:nowrap;
+  padding:5px 10px;border-radius:8px;background:var(--navy);color:#fff;font-size:11.5px;font-weight:700;
+  opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}
+.sidenav a:hover span{opacity:1;transform:translateY(-50%) translateX(0)}
+@media (min-width:1240px){.sidenav{display:flex}}
+
+/* ============ [C:セクション見出し] ============ */
+.sec{margin-top:56px}
+.sec-label{margin:0;text-align:center;font-family:'M PLUS 1',sans-serif;font-size:12.5px;letter-spacing:.16em;color:var(--blue);font-weight:800}
+.sec-title{margin:6px 0 6px;text-align:center;font-family:'M PLUS 1',sans-serif;font-size:clamp(21px,4.4vw,31px);line-height:1.42;color:var(--navy);font-weight:800}
+.sec-lead{margin:0 auto;max-width:36em;text-align:center;font-size:14.5px;color:var(--muted)}
+
+/* ============ [C:本文カード] ============ */
+.card{margin-top:22px;padding:clamp(20px,3.4vw,32px);border-radius:var(--radius);background:var(--white);
+  border:1px solid var(--line);box-shadow:var(--shadow);transition:transform .3s ease,box-shadow .3s ease}
+.card:hover{box-shadow:var(--shadow-hover)}
+.card h3{margin:26px 0 10px;font-family:'M PLUS 1',sans-serif;font-size:clamp(17px,2.8vw,21px);color:var(--navy);line-height:1.5}
+.card h3:first-child{margin-top:0}
+.card p{margin:0 0 12px}
+.card p:last-child{margin-bottom:0}
+.hl{background:linear-gradient(transparent 62%,rgba(8,102,255,.22) 62%);font-weight:800}
+
+/* [C:3Dホバーカード] グリッド内の小カードだけ軽く反応させる */
+.tilt{transform-style:preserve-3d;transition:transform .3s ease}
+
+/* ============ [C:手順ステップ] 番号つき縦並び ============ */
+.step{display:flex;gap:16px;padding:20px 0;border-top:1px dashed var(--line)}
+.step:first-of-type{border-top:0;padding-top:4px}
+.step-no{flex:0 0 42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:12px;
+  background:var(--grad-accent);color:#fff;font-family:'M PLUS 1',sans-serif;font-weight:800;font-size:17px;
+  box-shadow:0 8px 20px rgba(8,102,255,.28)}
+.step-body{flex:1;min-width:0}
+.step-body h4{margin:6px 0 8px;font-family:'M PLUS 1',sans-serif;font-size:16.5px;color:var(--navy);line-height:1.55}
+.step-body p{margin:0 0 10px;font-size:15px}
+
+/* ============ [C:グリッドカード] 3つ並べる用 ============ */
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:6px}
+.grid-item{padding:20px;border-radius:var(--radius-sm);background:var(--blue-soft);border:1px solid var(--line)}
+.grid-item .tag{display:inline-block;margin-bottom:8px;padding:3px 11px;border-radius:999px;background:var(--navy);color:#fff;font-size:11.5px;font-weight:800}
+.grid-item h4{margin:0 0 7px;font-family:'M PLUS 1',sans-serif;font-size:16px;color:var(--navy);line-height:1.5}
+.grid-item p{margin:0;font-size:14px;color:var(--ink-soft)}
+
+/* ============ [C:要点リスト] ============ */
+.takeaway{margin:0;padding:0;list-style:none;counter-reset:tk}
+.takeaway li{counter-increment:tk;position:relative;padding:14px 0 14px 46px;border-bottom:1px dashed var(--line)}
+.takeaway li:last-child{border-bottom:0}
+.takeaway li::before{content:counter(tk);position:absolute;left:0;top:14px;width:30px;height:30px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;background:var(--navy);color:#fff;font-size:14px;font-weight:800}
+.takeaway b{display:block;color:var(--navy);font-size:16px;line-height:1.6}
+.takeaway span{display:block;margin-top:5px;font-size:14.5px;color:var(--ink-soft)}
+
+/* [C:チェックリスト] */
+.check{margin:0;padding:0;list-style:none}
+.check li{position:relative;padding:9px 0 9px 32px;font-size:15px}
+.check li::before{content:"";position:absolute;left:4px;top:17px;width:14px;height:8px;border-left:3px solid var(--blue);border-bottom:3px solid var(--blue);transform:rotate(-45deg)}
+
+/* ============ [C:プロンプト枠] コピーボタン付き ============ */
+.prompt{position:relative;margin:18px 0;border-radius:var(--radius-sm);background:var(--code-bg);
+  box-shadow:0 16px 38px rgba(4,20,54,.32);overflow:hidden}
+.prompt-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;
+  background:rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.09)}
+.prompt-head b{color:#cfe4ff;font-size:12.5px;font-weight:800;letter-spacing:.04em}
+.copy{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:0;border-radius:9px;cursor:pointer;
+  background:var(--blue);color:#fff;font-size:12px;font-weight:800;font-family:inherit;transition:background .2s ease,transform .2s ease}
+.copy:hover{transform:translateY(-1px)}
+.copy.done{background:var(--ok)}
+.prompt pre{margin:0;padding:18px 18px 20px;overflow-x:auto;color:#e6f0ff;font-size:13.5px;line-height:1.85;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Noto Sans JP',monospace;white-space:pre-wrap;word-break:break-word}
+
+/* ============ [C:画像] 生成画像・スクショを本文に挟む ============ */
+.figure{margin:22px 0;border-radius:var(--radius-sm);overflow:hidden;background:var(--white);border:1px solid var(--line);box-shadow:var(--shadow)}
+.figure img{width:100%}
+.figure figcaption{padding:12px 16px;font-size:13px;color:var(--muted);background:var(--blue-soft);border-top:1px solid var(--line)}
+
+/* ============ [C:動画] 16:9で埋め込む ============ */
+.video{margin:20px 0 0;border-radius:var(--radius-sm);overflow:hidden;background:#050d1f;aspect-ratio:16/9;box-shadow:var(--shadow)}
+.video iframe,.video video{width:100%;height:100%;border:0;display:block}
+.video-note{margin:12px 0 0;font-size:13.5px;color:var(--muted)}
+
+/* ============ [C:表] 横スクロール対応 ============ */
+.table-scroll{margin:18px 0;overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--white)}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:14.5px}
+th,td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--navy);color:#fff;font-weight:800;white-space:nowrap}
+tbody tr:nth-child(even){background:var(--blue-soft)}
+tbody tr:last-child td{border-bottom:0}
+
+/* ============ [C:補足ボックス] ============ */
+.note{margin:16px 0;padding:14px 18px;border-radius:var(--radius-sm);background:var(--blue-soft);border-left:4px solid var(--blue);font-size:14px;color:var(--ink-soft)}
+.note.warn{background:#fff8ec;border-left-color:var(--warn)}
+.note b{color:var(--navy)}
+.example{margin:12px 0;padding:14px 18px;border-radius:var(--radius-sm);background:#f4f8ff;border:1px dashed var(--blue);font-size:14px}
+
+/* ============ [C:締めCTA] ============ */
+.closing{margin-top:64px;padding:clamp(30px,5vw,52px);border-radius:26px;color:#fff;text-align:center;
+  background:var(--grad-hero);box-shadow:var(--shadow-hover);position:relative;overflow:hidden}
+.closing::after{content:"";position:absolute;width:340px;height:340px;left:-120px;bottom:-160px;border-radius:50%;
+  background:radial-gradient(circle,rgba(40,211,255,.28),transparent 70%);animation:float 8s ease-in-out infinite}
+.closing-inner{position:relative;z-index:1}
+.closing h2{margin:0 0 12px;font-family:'M PLUS 1',sans-serif;font-size:clamp(20px,4vw,30px);line-height:1.45}
+.closing p{margin:0 auto 10px;max-width:38em;font-size:15px;opacity:.94}
+.closing .btn{margin-top:20px}
+.bonus{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin:24px 0 4px;text-align:left}
+.bonus div{padding:14px 16px;border-radius:13px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18)}
+.bonus b{display:block;font-family:'M PLUS 1',sans-serif;font-size:19px}
+.bonus span{font-size:12.5px;opacity:.85}
+
+.foot{margin-top:34px;text-align:center;font-size:12.5px;color:var(--muted)}
+
+/* [C:トップへ戻る] */
+.totop{position:fixed;right:20px;bottom:22px;z-index:50;width:48px;height:48px;border:0;border-radius:50%;cursor:pointer;
+  background:var(--navy);color:#fff;font-size:19px;box-shadow:var(--shadow);opacity:0;pointer-events:none;
+  transition:opacity .3s ease,transform .3s ease}
+.totop.show{opacity:1;pointer-events:auto}
+.totop:hover{transform:translateY(-3px)}
+
+/* ============ [C:出現アニメーション] ============ */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s ease}
+.rv.in{opacity:1;transform:none}
+
+@media (max-width:640px){
+  body{font-size:15.5px;line-height:1.9}
+  .step{gap:12px}
+  .step-no{flex-basis:36px;height:36px;font-size:15px}
+  .totop{right:14px;bottom:14px;width:44px;height:44px}
+}
+
+/* 動きが苦手な閲覧者には動きを止める */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .rv{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+
+<!-- [C:進捗バー] -->
+<div class="progress"><span id="bar"></span></div>
+
+<!-- [C:サイド進捗ナビ] -->
+<nav class="sidenav" id="sidenav" aria-label="セクション">
+  <a href="#s1"><span>全体像</span></a>
+  <a href="#s2"><span>準備</span></a>
+  <a href="#s3"><span>録画</span></a>
+  <a href="#s4"><span>鍵</span></a>
+  <a href="#s5"><span>文字起こし</span></a>
+  <a href="#s6"><span>スキル</span></a>
+  <a href="#s7"><span>自動実行</span></a>
+  <a href="#s8"><span>困った時</span></a>
+</nav>
+
+<div class="page">
+
+  <!-- ============ [C:ヒーロー] ============ -->
+  <header class="hero" id="hero">
+    <div class="hero-glow" id="glow"></div>
+    <div class="hero-inner">
+      <span class="badge"><span class="dot"></span>保存版資料｜構築マニュアル</span>
+      <h1>24時間データ自動更新パイプライン<br><span class="grad">Zoom × Grok × Claude Code</span></h1>
+      <p class="lead">保存版資料のお受け取り、ありがとうございます。この資料では、内容のまとめと、実際に手を動かすための手順をまとめています。会議の録画が、毎晩ひとりでに文字になって貯まっていく状態を、6ステップで作ります。</p>
+
+      <div class="hero-stats">
+        <div class="hero-stat"><b>6ステップ</b><span>準備から自動実行まで</span></div>
+        <div class="hero-stat"><b>約15円</b><span>1時間の会議を文字にする費用</span></div>
+        <div class="hero-stat"><b>8本</b><span>そのままコピーできる指示文</span></div>
+      </div>
+
+      <div class="hero-cta">
+        <a class="btn" href="#s1">資料を読みはじめる →</a>
+      </div>
+
+      <!-- 画像生成待ち（復旧後にコメントを外す）
+      <div class="hero-figure">
+        <img src="assets/hero.png" alt="会議の録画がフォルダに入り、夜のあいだに文字になって貯まっていく一周の図" width="1920" height="1080" fetchpriority="high">
+      </div>
+      -->
+
+      <p class="hero-meta">※ このページはブックマークして、作業しながら見返してください。<br>※ 画面の名称・料金は2026年9月時点の公式情報です。各章に公式ページのリンクを置いてあります。</p>
+    </div>
+  </header>
+
+  <!-- ============ [C:目次] ============ -->
+  <nav class="toc rv">
+    <h2>この資料の中身</h2>
+    <ol>
+      <li><a href="#s1">全体像：何を作るのか、いくらかかるのか</a></li>
+      <li><a href="#s2">STEP1　作業フォルダとClaude Codeを用意する</a></li>
+      <li><a href="#s3">STEP2　Zoomの録画がフォルダに入るようにする</a></li>
+      <li><a href="#s4">STEP3　Grokの鍵（APIキー）を取る</a></li>
+      <li><a href="#s5">STEP4　文字起こしを頼む</a></li>
+      <li><a href="#s6">STEP5　スキルにして固定する（配布スキル付き）</a></li>
+      <li><a href="#s7">STEP6　毎日自動で動かす</a></li>
+      <li><a href="#s8">うまくいかない時／今日やること</a></li>
+    </ol>
+  </nav>
+
+  <!-- ===================== S1 ===================== -->
+  <section class="sec" id="s1">
+    <p class="sec-label rv">OVERVIEW</p>
+    <h2 class="sec-title rv">全体像：何を作るのか、いくらかかるのか</h2>
+    <p class="sec-lead rv">作るのは「録る → 文字にする → 貯める」が毎晩ひとりでに回る状態です。</p>
+
+    <div class="card rv">
+      <p>会議は、自分の考え方も、商品のことも、お客さんとのやり取りも、その場で全部しゃべっています。ところが録画のまま置いておくと、結局あとから見返しません。そこで<b>録画を文字にしてAIに読ませる形で残す</b>ところまでを自動にします。</p>
+
+      <!-- 画像生成待ち（復旧後にコメントを外す）
+      <figure class="figure">
+        <img src="assets/s1-figure.png" alt="Zoomの録画がフォルダに入り、Grokで文字になり、Claude Codeが毎晩回して貯まっていく流れの図" width="1600" height="900" loading="lazy">
+        <figcaption>録る（Zoom）→ 文字にする（Grok）→ 貯める（フォルダ）。この一周を毎晩くり返します。</figcaption>
+      </figure>
+      -->
+
+      <h3>3つのツールの役割</h3>
+      <div class="grid">
+        <div class="grid-item tilt"><span class="tag">録る</span><h4>Zoom / Google Meet</h4><p>会議を録画します。Zoomはパソコンに保存する録画なら無料プランでも使えます。</p></div>
+        <div class="grid-item tilt"><span class="tag">文字にする</span><h4>Grok（xAI）</h4><p>音声を文字にします。使うのはGrok voice APIの文字起こし機能です。1時間あたり0.10ドル。</p></div>
+        <div class="grid-item tilt"><span class="tag">回す</span><h4>Claude Code</h4><p>パソコンの中の作業を代わりにやってくれるAIです。デスクトップアプリを使います。</p></div>
+      </div>
+
+      <h3>かかるお金</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>項目</th><th>費用</th><th>補足</th></tr></thead>
+          <tbody>
+            <tr><td>Zoom</td><td>0円</td><td>パソコンに保存する録画（コンピューターレコーディング）は無料プランでも使えます</td></tr>
+            <tr><td>Grok（xAI）の文字起こし</td><td>1時間 0.10ドル（約15円）</td><td>前払い式。毎日1時間会議があっても月300円ほど</td></tr>
+            <tr><td>Claude Code</td><td>月20ドル〜</td><td>Claudeの有料プラン（Pro / Max / Team / Enterprise）に含まれます</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hero-meta">※ 円換算は1ドル150円で計算した目安です。料金は各社の公式ページでご確認ください。</p>
+
+      <h3>作業の順番</h3>
+      <ol class="takeaway">
+        <li><b>STEP1〜3は準備</b><span>フォルダ・Zoomの保存先・Grokの鍵。ここだけ最初に1回やります</span></li>
+        <li><b>STEP4で1本試す</b><span>実際に1本文字にして、うまくいくことを確かめます</span></li>
+        <li><b>STEP5〜6で自動化</b><span>うまくいった流れをスキルにして、毎晩の自動実行に登録します</span></li>
+      </ol>
+
+      <div class="note"><b>ポイント：</b>いきなり自動化しないでください。<b>1回手で動かして、うまくいった流れを固定する</b>のがコツです。先に自動化すると、どこで失敗しているのか分からなくなります。</div>
+    </div>
+  </section>
+
+  <!-- ===================== S2 ===================== -->
+  <section class="sec" id="s2">
+    <p class="sec-label rv">STEP 01</p>
+    <h2 class="sec-title rv">作業フォルダとClaude Codeを用意する</h2>
+    <p class="sec-lead rv">録画と文字起こしを置く場所を決めて、Claude Codeにその場所を教えます。</p>
+
+    <div class="card rv">
+      <h3>手順</h3>
+      <div class="step">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <h4>「会議データ」フォルダを作る</h4>
+          <p>MacならFinder、Windowsならエクスプローラーで、好きな場所に「会議データ」という名前のフォルダを作ります。デスクトップや書類フォルダの直下で大丈夫です。</p>
+          <div class="example">例：<code>書類 / 会議データ</code>（この中に、あとで「文字起こし」フォルダが自動で作られます）</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <h4>Claude Codeのデスクトップアプリを入れる</h4>
+          <p>公式サイトからアプリをダウンロードしてインストールし、起動してサインインしたら「Code」タブを開きます。利用にはClaudeの有料プラン（Pro / Max / Team / Enterprise）が必要です。</p>
+          <a class="toollink" href="https://claude.com/download" target="_blank" rel="noopener">Claude デスクトップアプリ ダウンロード</a>
+          <a class="toollink" href="https://code.claude.com/docs/en/desktop" target="_blank" rel="noopener">Claude Code デスクトップ 公式ガイド</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <h4>作業するフォルダに「会議データ」を選ぶ</h4>
+          <p>最初のメッセージを送る前に、入力欄のまわりで<b>作業フォルダ（Project folder）</b>を選びます。ここで「会議データ」フォルダを指定すると、Claude Codeがこのフォルダの中を読んだり、ファイルを作ったりできるようになります。</p>
+          <div class="note"><b>ポイント：</b>ふだん使っている書類フォルダ全体を選ばないでください。関係のないファイルまで読みに行くので、出てくる答えの精度が落ちます。<b>この仕組み専用のフォルダ</b>を1つ用意するのが正解です。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">4</div>
+        <div class="step-body">
+          <h4>許可の出し方（権限モード）を知っておく</h4>
+          <p>Claude Codeは、ファイルを作ったり命令を実行したりする前に確認を出します。入力欄の横のモード切り替えで、確認の細かさを選べます。最初は既定の <b>Manual</b>（毎回確認）のままで進めて、毎回出てくる確認に「許可」を押していけば大丈夫です。</p>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>モード</th><th>どうなるか</th></tr></thead>
+              <tbody>
+                <tr><td>Manual</td><td>毎回確認する（最初はこれ）</td></tr>
+                <tr><td>Accept edits</td><td>ファイルの編集は自動で進める</td></tr>
+                <tr><td>Plan</td><td>調べるだけ。ファイルは変更しない</td></tr>
+                <tr><td>Auto</td><td>安全チェック付きで全部自動</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="note"><b>Codex（コーデックス／ChatGPTのAIエージェント機能）を使う方へ：</b>ChatGPTのデスクトップアプリでも同じことができます。アプリを開いて「フォルダを開く（open a folder）」で「会議データ」を指定してください。以降の指示文（プロンプト）はそのまま使えます。<a class="toollink" href="https://learn.chatgpt.com/docs/app" target="_blank" rel="noopener">ChatGPTデスクトップアプリ 公式ガイド</a></div>
+    </div>
+  </section>
+
+  <!-- ===================== S3 ===================== -->
+  <section class="sec" id="s3">
+    <p class="sec-label rv">STEP 02</p>
+    <h2 class="sec-title rv">Zoomの録画がフォルダに入るようにする</h2>
+    <p class="sec-lead rv">録画の保存先を「会議データ」に変えておくと、あとは会議をするだけで素材が貯まります。</p>
+
+    <div class="card rv">
+      <h3>手順</h3>
+      <div class="step">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <h4>保存先を「会議データ」に変える</h4>
+          <p>パソコンのZoomアプリにサインインして、<b>設定（Settings）→ レコーディング（Recording）</b>を開きます。<b>保存場所（Storage location）</b>の<b>変更（Change）</b>を押して、STEP1で作った「会議データ」フォルダを選びます。</p>
+          <a class="toollink" href="https://support.zoom.com/hc/en/article?id=zm_kb&amp;sysparm_article=KB0063423" target="_blank" rel="noopener">Zoom公式：パソコンに保存する録画の管理</a>
+          <div class="note warn"><b>注意：</b>保存先をGoogleドライブやDropboxの同期フォルダ、外付けドライブにすると、録画の保存や変換に失敗することがあるとZoomが案内しています。パソコン内のフォルダを選んでください。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <h4>会議中に録画を始める</h4>
+          <p>会議の画面の下にある<b>レコーディング（Record）</b>を押して、<b>このコンピューターにレコーディング（Record on this Computer）</b>を選びます。無料プランでも使えます。自分がホストでない時は、ホストから録画の許可をもらってください。</p>
+          <div class="note"><b>マナー：</b>録画する時は、最初に一言「録画させてください」と相手に許可を取ってください。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <h4>録り忘れを無くす（自動録画）</h4>
+          <p>ZoomのWebサイトにログインして、<b>設定 → 記録（Recording）→ 自動記録（Automatic recording）</b>をオンにし、<b>ローカルコンピューターに記録（Record on the local computer）</b>を選びます（ローカル＝自分のパソコンの中、という意味です）。会議が始まった瞬間から自動で録画されます。無料プランの場合、自動録画はパソコン保存のみ使えます。</p>
+          <a class="toollink" href="https://support.zoom.com/hc/en/article?id=zm_kb&amp;sysparm_article=KB0067954" target="_blank" rel="noopener">Zoom公式：自動録画の設定</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">4</div>
+        <div class="step-body">
+          <h4>会議が終わったら、変換が終わるまで待つ</h4>
+          <p>会議を終了すると、Zoomが録画ファイルの変換を始めます。終わると保存フォルダが自動で開きます。中身はこうなります。</p>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>ファイル</th><th>中身</th></tr></thead>
+              <tbody>
+                <tr><td><code>video◯◯◯.mp4</code></td><td>映像と音声</td></tr>
+                <tr><td><code>audio◯◯◯.m4a</code></td><td>音声だけ（文字起こしはこれを使います）</td></tr>
+                <tr><td><code>chat.txt</code></td><td>会議中のチャット</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note warn"><b>注意：</b>変換の途中でパソコンを再起動したり、ノートパソコンの蓋を閉じたりすると、録画ファイルが壊れて戻せなくなることがあります。変換が終わるまで待ってください。</div>
+        </div>
+      </div>
+
+      <h3>Google Meetを使っている場合</h3>
+      <p>Google Meetの録画は、Googleドライブの<b>「Meet Recordings（Google Meet）」フォルダ</b>に保存されます。そこからダウンロードして、「会議データ」フォルダに入れれば、この先の手順はまったく同じです。</p>
+      <ul class="check">
+        <li>会議中に、右下の<b>会議ツール</b>アイコン →「録画」→「録画を開始」</li>
+        <li>会議終了後、主催者のGoogleドライブ →「Meet Recordings」フォルダを開く</li>
+        <li>ファイルを選んで「その他」→「ダウンロード」</li>
+        <li>ダウンロードしたファイルを「会議データ」フォルダに入れる</li>
+      </ul>
+      <div class="note"><b>先に確認：</b>Google Meetの録画は、対応しているGoogle Workspaceのエディション（Business Standard 以上など）と、Google One 2TB以上のプランで使えます。無料のGoogleアカウントは対応一覧に入っていません。<a class="toollink" href="https://support.google.com/meet/answer/9308681?hl=ja" target="_blank" rel="noopener">Google公式：Meetの録画</a></div>
+    </div>
+  </section>
+
+  <!-- ===================== S4 ===================== -->
+  <section class="sec" id="s4">
+    <p class="sec-label rv">STEP 03</p>
+    <h2 class="sec-title rv">Grokの鍵（APIキー）を取る</h2>
+    <p class="sec-lead rv">文字起こしに使うのは、xAIのGrok voice APIです。鍵を取って、パソコンの中の隠しファイルに入れます。</p>
+
+    <div class="card rv">
+      <p><b>APIキー</b>（エーピーアイキー）は、外のサービスをAIから使うための、自分専用の暗証番号のようなものです。これを発行して、Claude Codeが読める場所に置いておきます。</p>
+
+      <h3>手順</h3>
+      <div class="step">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <h4>xAIのコンソールに登録する</h4>
+          <p>xAIの管理画面（コンソール）にアクセスして、アカウントを作ります。</p>
+          <a class="toollink" href="https://console.x.ai/" target="_blank" rel="noopener">xAI コンソール</a>
+          <a class="toollink" href="https://docs.x.ai/developers/quickstart" target="_blank" rel="noopener">xAI公式：はじめ方</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <h4>APIキーを作る</h4>
+          <p>コンソールの<b>API Keys</b>のページでキーを作成し、表示されたキーをコピーします。</p>
+          <div class="note warn"><b>注意：</b>キーは作成した時にコピーして、安全な場所に保存してください。あとから同じキーをもう一度表示できるかは保証されていません。分からなくなったら、新しく作り直せば大丈夫です。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <h4>クレジットをチャージする</h4>
+          <p>xAIのAPIは前払い式です。コンソールの<b>Billing</b>から支払い方法を登録して、クレジットを購入します。文字起こしは1時間あたり0.10ドルなので、最初は少額で十分です。</p>
+          <a class="toollink" href="https://docs.x.ai/console/billing" target="_blank" rel="noopener">xAI公式：支払いとクレジット</a>
+          <div class="note"><b>補足：</b>残高が減ったら自動で買い足す設定（Auto top-ups）もあります。チャージ額は5ドルから設定できます。</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">4</div>
+        <div class="step-body">
+          <h4>.envファイルを作ってもらう</h4>
+          <p><b>.env</b>（ドットエンブ）は、APIキーのような人に見せてはいけない情報を入れておくファイルです。Claude Codeにこう頼むと作ってくれます。</p>
+        </div>
+      </div>
+
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文1：.envファイルを作ってもらう</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>xAIのAPIキーを取得したので、「会議データ」フォルダに.envファイルを作ってください。
+XAI_API_KEY という項目を1行用意して、値は空のままにしておいてください。</pre>
+      </div>
+
+      <div class="step">
+        <div class="step-no">5</div>
+        <div class="step-body">
+          <h4>.envを開いて、キーを貼り付ける</h4>
+          <p>できあがった<code>.env</code>を開いて、<code>XAI_API_KEY=</code> の後ろに、コピーしておいたキーを貼り付けて保存します。<code>.env</code>は隠しファイルなので、そのままでは見えません。表示方法は下のとおりです。</p>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>パソコン</th><th>隠しファイルの出し方</th></tr></thead>
+              <tbody>
+                <tr><td>Mac</td><td>Finderで <code>command</code> + <code>shift</code> + <code>.</code>（ピリオド）を同時に押す。うまくいかない時は、メニューの「移動」→「フォルダへ移動」（<code>command</code> + <code>shift</code> + <code>G</code>）でフォルダのパスを直接入力する</td></tr>
+                <tr><td>Windows 11</td><td>エクスプローラーの「表示」→「表示」→「<b>非表示のアイテム</b>」にチェックを入れる</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <a class="toollink" href="https://support.microsoft.com/ja-jp/windows/97fbc472-c603-9d90-91d0-1166d1d9f4b5" target="_blank" rel="noopener">Microsoft公式：隠しファイルの表示</a>
+        </div>
+      </div>
+
+      <div class="note warn"><b>キーの扱い：</b>APIキーは暗証番号と同じです。<b>チャットに貼らない・人に見せない・画面に映さない</b>を徹底してください。漏れると、チャージした残高を他の人に使われてしまいます。</div>
+    </div>
+  </section>
+
+  <!-- ===================== S5 ===================== -->
+  <section class="sec" id="s5">
+    <p class="sec-label rv">STEP 04</p>
+    <h2 class="sec-title rv">文字起こしを頼む</h2>
+    <p class="sec-lead rv">まずは1本だけ試します。ここがうまくいけば、あとは自動化するだけです。</p>
+
+    <div class="card rv">
+      <p>録画が1本入っている状態で、Claude Codeにこう頼みます。日本語で頼むだけで、文字起こしをするためのプログラムをClaude Codeが自分で書いて動かしてくれます。</p>
+
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文2：録画を1本、文字にしてもらう</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>「会議データ」フォルダにある直近のZoomの録画（音声ファイル）1本を、Grok voice APIの文字起こし機能で文字にして、「文字起こし」フォルダにテキストで保存してください。
+
+条件:
+- 使うモデルは grok-voice-transcribe-2.0、送信先は https://api.x.ai/v1/stt
+- 言語は日本語（language=ja）、話者分けあり（diarize=true）
+- APIキーは.envのXAI_API_KEYに入っています
+- 1ファイル500MBを超える時は、音声を分割してから送ってください
+- 終わったら、文字にしたファイル名をチャットで教えてください
+足りない情報は私に質問してください。</pre>
+      </div>
+
+      <h3>やりとりの流れ</h3>
+      <div class="step">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <h4>聞かれたことに答える</h4>
+          <p>「どのファイルを使いますか」「保存先はここで良いですか」のように質問が来ます。答えていけば形になります。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <h4>実行の確認には「許可」を押す</h4>
+          <p>プログラムを動かす前に確認が出ます。中身を見て「許可」を押してください。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <h4>できあがった文字起こしを開いて確認する</h4>
+          <p>「文字起こし」フォルダにテキストができます。<b>人の名前や商品名が崩れていないか</b>だけ、ざっと目を通してください。崩れていてもSTEP5で直せます。</p>
+        </div>
+      </div>
+
+      <h3>文字にしたら、すぐ使ってみる</h3>
+      <p>貯めるだけでは意味がないので、その場でAIに聞いてみます。</p>
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文3：会議の決定事項をまとめてもらう</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>「文字起こし」フォルダにある今日の会議のテキストを読んで、決まったことを3行でまとめてください。
+あわせて、誰が何をやるかの宿題も箇条書きにしてください。</pre>
+      </div>
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文4：過去の会議を検索する（貯まってから使う）</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>「文字起こし」フォルダの中から、「{調べたいテーマ}」について話している会議を探して、
+いつ・どの会議で・どんな結論になったかをまとめてください。
+発言があった箇所は、録画の何分あたりかも書いてください。</pre>
+      </div>
+
+      <div class="note"><b>使える理由：</b>Grokの文字起こしは、話した時間（何分何秒か）と、話者の区別まで一緒に残せます。だから「あの会議で何て決めたっけ？」に、AIがそのまま答えられます。<a class="toollink" href="https://docs.x.ai/developers/model-capabilities/audio/speech-to-text" target="_blank" rel="noopener">xAI公式：文字起こしAPIの仕様</a></div>
+    </div>
+  </section>
+
+  <!-- ===================== S6 ===================== -->
+  <section class="sec" id="s6">
+    <p class="sec-label rv">STEP 05</p>
+    <h2 class="sec-title rv">スキルにして固定する</h2>
+    <p class="sec-lead rv">うまくいった流れを「スキル」にすると、次からは一言で同じ作業が動きます。</p>
+
+    <div class="card rv">
+      <p><b>スキル</b>は、作業の手順をAIに覚えさせたものです。一度作れば、毎回説明しなくても同じ流れで動いてくれます。作ったスキルはファイルとして残るので、チームのメンバーに渡すこともできます。</p>
+
+      <h3>スキルクリエイターを使う</h3>
+      <p>スキルを作るためのスキルが<b>スキルクリエイター（skill-creator）</b>です。日本語で頼むだけで作ってくれます。</p>
+      <div class="step">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <h4>使える状態か確認する</h4>
+          <p>入力欄で <code>/</code> を打つと、使えるスキルの一覧が出ます。ここに skill-creator が無ければ、次の手順で追加します。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <h4>入っていなければ追加する</h4>
+          <p>入力欄の横の <b>+</b> ボタン →<b>Plugins</b> →<b>Add plugin</b> を開くと、公式のプラグイン（機能を追加する部品）の一覧から追加できます。一覧から探せない時は、チャットに次の1行を送る方法もあります。</p>
+          <div class="example">例：<code>/plugin install skill-creator@claude-plugins-official</code></div>
+          <a class="toollink" href="https://code.claude.com/docs/en/skills" target="_blank" rel="noopener">Claude Code公式：スキル</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <h4>ここまでの流れをスキルにしてもらう</h4>
+          <p>STEP4がうまくいった、同じチャットの続きで頼むのがコツです。それまでのやりとりを全部読んで、手順に落としてくれます。</p>
+        </div>
+      </div>
+
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文5：文字起こしをスキルにする</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>スキルクリエイターを使って、ここまでのやり取りを全部参照して、業務をスキル化してください。
+
+スキルの内容:
+- 「会議データ」フォルダの中で、まだ文字起こししていない録画だけを見つける
+- Grok voice APIの文字起こし機能で文字にして、「文字起こし」フォルダに保存する
+- 終わったら、文字にしたファイル名をチャットで報告する
+スキルの名前は「会議の文字起こし」にしてください。</pre>
+      </div>
+
+      <p>作っている途中で、スキルの名前や、どんな時に使うかを聞かれます。答えていけば完成です。次からはチャットで<b>「会議の文字起こしのスキルを使って」</b>と言うだけで、同じ流れが動きます。</p>
+
+      <h3>もう一段、精度を上げる（固有名詞の登録）</h3>
+      <p>文字起こしで一番困るのは、人の名前や商品名が崩れることです。Grokの文字起こしには、<b>先に覚えさせておきたい言葉を渡せる仕組み（keyterm）</b>があります。最大100語まで、1語50文字までです。</p>
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文6：固有名詞を登録できるようにする</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>このスキルに、私の名前・会社名・商品名・よく出るツール名を登録できるようにして、
+文字起こしのたびにGrokへ渡すようにしてください（keytermパラメータ）。
+登録する言葉は、スキルの中の分かりやすい場所に一覧で書いておいてください。</pre>
+      </div>
+
+      <h3>そのまま使えるスキル（配布用）</h3>
+      <p>ここまでの流れを、誰でもそのまま使える形にしたものが下です。<b>丸ごとコピーして、Claude Codeのチャットに貼り付ける</b>と、この手順書どおりのスキルを作ってくれます。個人の設定（保存先・固有名詞）は、最初に使う時に聞かれるので、答えるだけで動きます。</p>
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文7：配布用スキル（コピーして貼るだけ）</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>スキルクリエイターを使って、下の内容のスキルを作ってください。名前は「会議の文字起こし」です。
+
+## このスキルがやること
+会議の録画（音声ファイル）を、Grok voice APIで文字にして、指定のフォルダにテキストで保存し、結果をチャットで報告する。
+
+## 最初に使う時に、ユーザーへ質問すること
+1. 録画が入っているフォルダはどこか（例：会議データ）
+2. 文字起こしを保存するフォルダはどこか（例：会議データ/文字起こし）
+3. 正しく書き起こしたい固有名詞（本人の名前・会社名・商品名・よく出るツール名。最大100語）
+4. 議事録の要約も一緒に作るかどうか
+答えてもらった内容は、スキルの設定としてファイルに保存し、次回からは質問しない。
+
+## 毎回の処理手順
+1. 録画フォルダの音声ファイル（.m4a / .mp3 / .wav / .mp4）を新しい順に見る
+2. 同じ名前のテキストが文字起こしフォルダに無いものだけを対象にする（処理済みは飛ばす）
+3. 1件ずつ、xAIの文字起こしAPIへ送る
+   - 送信先: https://api.x.ai/v1/stt
+   - モデル: grok-voice-transcribe-2.0
+   - language=ja、diarize=true、登録済みの固有名詞をkeytermで渡す
+   - APIキーは.envのXAI_API_KEYから読む（キーの値はチャットに出力しない）
+   - 1ファイル500MBを超える場合は、音声を分割して送り、結果をつなげる
+4. 結果を「YYYY-MM-DD_会議名.txt」の形で文字起こしフォルダに保存する
+   - 1行ごとに、話した時間（開始からの経過）と話者番号を付ける
+5. 要約を作る設定なら、同じ名前で「_要約.md」も作る（決定事項・宿題・次回までの確認事項）
+6. 最後に、処理したファイル名と件数、失敗があればその理由をチャットで報告する
+
+## 注意
+- APIキーとその値は、チャット・ログ・ファイル名に絶対に書かない
+- 失敗したファイルがあっても止まらず、残りを処理してから最後にまとめて報告する
+- 同じファイルを二重に処理しない</pre>
+      </div>
+
+      <div class="note"><b>スキルの置き場所：</b>作ったスキルは、パソコンの中にフォルダとして保存されます。場所が分からなくなったら、チャットで「さっき作ったスキルはどこに保存されましたか？」と聞けば教えてくれます。チームに渡す時は、そのフォルダごと共有すれば同じ仕組みが使えます。</div>
+    </div>
+  </section>
+
+  <!-- ===================== S7 ===================== -->
+  <section class="sec" id="s7">
+    <p class="sec-label rv">STEP 06</p>
+    <h2 class="sec-title rv">毎日自動で動かす</h2>
+    <p class="sec-lead rv">Claude Codeの「ルーティン」に登録すると、毎晩ひとりでに文字起こしが進みます。</p>
+
+    <div class="card rv">
+      <h3>手順</h3>
+      <div class="step">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <h4>ルーティンを開く</h4>
+          <p>Claude Codeのデスクトップアプリで、左のサイドバーの<b>Routines（ルーティン）</b>を開きます。見当たらない時は、サイドバーの<b>More</b>の中にあります。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <h4>「New routine」→「Local」を選ぶ</h4>
+          <p><b>Local</b>＝ローカル（自分のパソコンの中で動かす方法）を選びます。もう一つの<b>Cloud（クラウド）</b>はネット上で動くため、パソコンの中のファイルを読めません。今回は必ず<b>Local</b>のほうを選んでください。</p>
+          <a class="toollink" href="https://code.claude.com/docs/en/desktop-scheduled-tasks" target="_blank" rel="noopener">Claude Code公式：ローカルの定期実行</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <h4>中身を入れる</h4>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>入力欄</th><th>入れるもの</th></tr></thead>
+              <tbody>
+                <tr><td>Name（名前）</td><td>会議の文字起こし</td></tr>
+                <tr><td>Description（説明）</td><td>未処理の録画を毎晩まとめて文字にする</td></tr>
+                <tr><td>Instructions（やってほしいこと）</td><td>下の指示文8をそのまま貼る</td></tr>
+                <tr><td>フォルダ</td><td>「会議データ」（指示欄の下で選びます。必須です）</td></tr>
+                <tr><td>Schedule（いつ）</td><td>Daily（毎日）＋ 時刻。深夜2時など、パソコンを使っていない時間がおすすめ</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>毎日のほかに、Hourly（1時間ごと）、Weekdays（平日だけ）、Weekly（毎週）も選べます。会議の多さに合わせてください。</p>
+        </div>
+      </div>
+
+      <div class="prompt">
+        <div class="prompt-head">
+          <b>指示文8：ルーティンの「やってほしいこと」欄に入れる文</b>
+          <button class="copy" type="button">コピー</button>
+        </div>
+        <pre>「会議の文字起こし」のスキルを実行してください。
+まだ文字起こししていない録画だけを対象にして、終わったら処理した件数とファイル名を報告してください。</pre>
+      </div>
+
+      <div class="step">
+        <div class="step-no">4</div>
+        <div class="step-body">
+          <h4>保存したら「Run now」で1回試す</h4>
+          <p>保存後、詳細ページの<b>Run now（今すぐ実行）</b>で1回動かします。実行の途中で確認が出たら<b>always allow（常に許可）</b>を選んでおくと、次からは止まらずに最後まで動きます。</p>
+          <div class="note"><b>ポイント：</b>ここで「常に許可」を選んでおかないと、夜中の実行が確認待ちで止まったままになります。<b>必ず1回手で動かして、確認に答えておいてください。</b></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">5</div>
+        <div class="step-body">
+          <h4>パソコンがスリープしない設定にする</h4>
+          <p>ルーティンは<b>アプリが起動していて、パソコンが起きている間だけ</b>動きます。設定の<b>Desktop app → General</b>にある<b>Keep computer awake（パソコンをスリープさせない）</b>をオンにしてください。</p>
+          <div class="note warn"><b>注意：</b>ノートパソコンは、蓋を閉じるとこの設定でもスリープします。夜のあいだは蓋を開けたままにしておいてください。もし実行できない日があっても、次にパソコンを開いた時に<b>直近の1回分だけ</b>まとめて実行されます（7日以内）。</div>
+        </div>
+      </div>
+
+      <!-- 画像生成待ち（復旧後にコメントを外す）
+      <figure class="figure">
+        <img src="assets/s7-figure.png" alt="昼に会議、深夜2時に自動実行、朝にはテキストになっているという時間の流れの図" width="1600" height="900" loading="lazy">
+        <figcaption>昼に話した内容が、翌朝には読める形になっています。</figcaption>
+      </figure>
+      -->
+
+      <h3>動き出したあとの見かた</h3>
+      <ul class="check">
+        <li>実行されるとパソコンに通知が届く</li>
+        <li>サイドバーの「Scheduled」に、その回のやりとりが残る（あとから中身を確認できる）</li>
+        <li>時間ややることは、詳細ページの「Edit」でいつでも変更できる</li>
+        <li>止めたい時は「Status」を Paused（一時停止）にする</li>
+      </ul>
+
+      <div class="note"><b>すぐ文字にしたい時は：</b>会議が終わった直後にチャットで「会議の文字起こしのスキルを使って」と言えばその場で動きます。普段はルーティンに任せておけば大丈夫です。</div>
+      <div class="note"><b>Codexを使う方へ：</b>ChatGPTのデスクトップアプリにも定期実行（Scheduled tasks）があります。チャットで「毎日深夜2時に、会議の文字起こしをやって」と頼むと登録できます。ローカルのファイルを扱う時は、パソコンとアプリを起動したままにしてください。</div>
+    </div>
+  </section>
+
+  <!-- ===================== S8 ===================== -->
+  <section class="sec" id="s8">
+    <p class="sec-label rv">TROUBLE &amp; CHECK</p>
+    <h2 class="sec-title rv">うまくいかない時／今日やること</h2>
+    <p class="sec-lead rv">詰まりやすいところを先にまとめました。ほとんどはここで解決します。</p>
+
+    <div class="card rv">
+      <h3>よくある詰まりどころ</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>症状</th><th>原因</th><th>対処</th></tr></thead>
+          <tbody>
+            <tr><td>録画がフォルダに入らない</td><td>保存先が変わっていない／変換が終わっていない</td><td>Zoomの設定→レコーディングで保存場所を確認。会議終了後、変換が終わるまで待つ</td></tr>
+            <tr><td>文字起こしでエラーが出る</td><td>クレジットが切れている／キーが違う</td><td>xAIのBillingで残高を確認。キーを作り直して.envに入れ直す</td></tr>
+            <tr><td>長い会議で止まる</td><td>1ファイル500MBの上限</td><td>「音声を分割して送ってください」と伝える（指示文2に入れてあります）</td></tr>
+            <tr><td>人の名前が崩れる</td><td>固有名詞を渡していない</td><td>指示文6で登録する。あとから言葉を足すこともできる</td></tr>
+            <tr><td>夜のうちに動いていない</td><td>スリープ／アプリが終了している／確認待ちで止まっている</td><td>Keep computer awakeをオン、アプリは開いたまま、Run nowで「常に許可」を済ませる</td></tr>
+            <tr><td>同じ録画が何度も処理される</td><td>処理済みの判定が入っていない</td><td>「まだ文字起こししていないものだけ」をスキルに入れる（配布用スキルには入っています）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>今日やることチェックリスト</h3>
+      <ul class="check">
+        <li>「会議データ」フォルダを作って、Claude Codeの作業フォルダに指定した</li>
+        <li>Zoomの録画の保存先を「会議データ」に変えた</li>
+        <li>xAIでAPIキーを作って、クレジットをチャージした</li>
+        <li>.envにキーを貼り付けて保存した</li>
+        <li>録画を1本、文字にできた</li>
+        <li>その流れをスキルにした（名前は「会議の文字起こし」）</li>
+        <li>ルーティンに登録して、Run nowで1回動かした</li>
+        <li>次の会議を録画した</li>
+      </ul>
+
+      <ol class="takeaway">
+        <li><b>データは後から取り戻せない</b><span>半年前の会議は、今から録音できません。始めるのは次の会議からで十分です</span></li>
+        <li><b>貯めるだけでは使えない</b><span>AIが読める文字の形で、毎日更新され続けている状態にして初めて武器になります</span></li>
+        <li><b>まず1本、手で通す</b><span>うまくいった流れを固定するのが、自動化を失敗させないコツです</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ [C:締めCTA] ============ -->
+  <section class="closing rv">
+    <div class="closing-inner">
+      <h2>仕組みができたら、次の一歩へ</h2>
+      <p>この資料の6ステップをそのまま実行すれば、今日から自分の発言が貯まりはじめます。さらに深く学びたい方へ、公式LINEから参加できる「AI×SNS攻略 月額0円コミュニティ」（LINEオープンチャット）をご用意しています。追加12大特典に加えて、最新のAI×マーケティング情報を僕がキャッチアップして配信しています。</p>
+      <p>コミュニティでは、累計3,000名以上が参加した『AI駆動型コンテンツビジネス 0→100完全攻略セミナー』にも完全無料でご招待しています。参加で豪華20大特典がもらえてしまうので、ぜひこちらもご活用ください。</p>
+
+      <div class="bonus">
+        <div><b>10大特典</b><span>公式LINE（受け取り済み）</span></div>
+        <div><b>追加12大特典</b><span>AI×SNS攻略 月額0円コミュニティ</span></div>
+        <div><b>20大特典</b><span>0→100完全攻略セミナー</span></div>
+      </div>
+
+      <a class="btn" href="https://utage-system.com/line/open/ttS3H5oAa7lk?mtid=gb3g3fVXON1c" target="_blank" rel="noopener">月額0円コミュニティの案内を受け取る</a>
+      <p class="hero-meta">※ オープンチャットへの参加案内は、公式LINEのトークに届きます。</p>
+    </div>
+  </section>
+
+  <p class="foot">星川ユウヤ</p>
+</div>
+
+<button class="totop" id="totop" type="button" aria-label="ページ上部へ戻る">↑</button>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* [C:進捗バー] + [C:トップへ戻る] */
+  var bar = document.getElementById('bar');
+  var totop = document.getElementById('totop');
+  function onScroll(){
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    var p = max > 0 ? (h.scrollTop / max) * 100 : 0;
+    if (bar) bar.style.width = p + '%';
+    if (totop) totop.classList.toggle('show', h.scrollTop > 640);
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  if (totop) totop.addEventListener('click', function(){
+    window.scrollTo({top:0, behavior: reduce ? 'auto' : 'smooth'});
+  });
+
+  /* [C:出現アニメーション] 画面に入ったらふわっと表示 */
+  var rv = document.querySelectorAll('.rv');
+  if ('IntersectionObserver' in window && !reduce){
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, {rootMargin:'0px 0px -12% 0px', threshold:0});  /* threshold>0だと、ビューポートの十数倍の高さの要素（長文プロンプトのカード等）で一生発火せず透明のまま章が消える（2026-08-20 No.12で実発生: 19,267pxのカードは最大でも3.7%しか見えない） */
+    rv.forEach(function(el){ io.observe(el); });
+  } else {
+    rv.forEach(function(el){ el.classList.add('in'); });
+  }
+
+  /* [C:目次] + [C:サイド進捗ナビ] 現在地ハイライト */
+  var secs = Array.prototype.slice.call(document.querySelectorAll('section.sec[id]'));
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.sidenav a'));
+  if (secs.length && 'IntersectionObserver' in window){
+    var spy = new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(!e.isIntersecting) return;
+        var id = '#' + e.target.id;
+        tocLinks.forEach(function(a){ a.classList.toggle('active', a.getAttribute('href') === id); });
+        navLinks.forEach(function(a){ a.classList.toggle('active', a.getAttribute('href') === id); });
+      });
+    }, {rootMargin:'-45% 0px -45% 0px'});
+    secs.forEach(function(s){ spy.observe(s); });
+  }
+
+  /* [C:プロンプト枠] コピーボタン */
+  document.querySelectorAll('.prompt .copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pre = btn.closest('.prompt').querySelector('pre');
+      if(!pre) return;
+      var text = pre.innerText;
+      var done = function(){
+        var old = btn.textContent;
+        btn.textContent = 'コピーしました';
+        btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1600);
+      };
+      if (navigator.clipboard && window.isSecureContext){
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else { fallback(); }
+      function fallback(){
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly','');
+        ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch(e){}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+
+  if (reduce) return;
+
+  /* [C:ヒーロー] マウス追従の光。触っていない時は中央 */
+  var hero = document.getElementById('hero');
+  var glow = document.getElementById('glow');
+  if (hero && glow){
+    hero.addEventListener('pointermove', function(ev){
+      var r = hero.getBoundingClientRect();
+      glow.style.setProperty('--mx', ((ev.clientX - r.left) / r.width * 100) + '%');
+      glow.style.setProperty('--my', ((ev.clientY - r.top) / r.height * 100) + '%');
+    });
+  }
+
+  /* [C:3Dホバーカード] 指で触る端末では無効（横スクロールを出さないため） */
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches){
+    document.querySelectorAll('.tilt').forEach(function(el){
+      el.addEventListener('pointermove', function(ev){
+        var r = el.getBoundingClientRect();
+        var rx = ((ev.clientY - r.top) / r.height - .5) * -5;
+        var ry = ((ev.clientX - r.left) / r.width - .5) * 5;
+        el.style.transform = 'perspective(760px) rotateX(' + rx + 'deg) rotateY(' + ry + 'deg) translateY(-3px)';
+      });
+      el.addEventListener('pointerleave', function(){ el.style.transform = ''; });
+    });
+  }
+})();
+</script>
+</body>
+</html>
